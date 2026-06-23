@@ -1,6 +1,25 @@
 # AutoClickerPAM — Chrome Extension Manifest V3
 
-> Keeps tabs active by automatically simulating light activity (mousemove, small scroll, focus event) without clicking buttons, submitting forms, or refreshing pages.
+> Keeps tabs active by automatically simulating light activity (`mousemove`, small scroll, `focus` event) without clicking buttons, submitting forms, or refreshing pages.
+>
+> 📖 **Read the [Project Backstory](file:///d:/proj/AutoClickerPAM/BACKSTORY.md)** to learn about the specific RDP, PAM360, and Windows GPO session timeout problems this extension solves.
+
+---
+
+## ⚡ Key Features
+
+1. **Dual Activation Modes**:
+   * **Alarm Mode (Min. 60s)**: Uses Chrome's background `alarms` API. It is highly battery-efficient and runs execution in the background at regular intervals (minimum 60 seconds due to Chrome limit).
+   * **Content Script Mode (Min. 5s)**: Directly injects a script into the target page. Allows shorter, customizable intervals (minimum 5 seconds) for systems with aggressive session timeouts.
+2. **Reload Resilience**:
+   * If you refresh or reload the target tab while **Content Script Mode** is active, the extension automatically detects the update and re-injects the keep-alive loop. No manual restart is required.
+3. **Safe Simulation**:
+   * Simulates light, natural user activities every tick without modifying page data, clicking elements, or initiating page reloads.
+4. **Minimal Dark-Themed UI**:
+   * High performance, distraction-free control panel.
+   * Displays the active target tab name, elapsed duration timer, and real-time visual progress bar tracking the current interval.
+5. **Smart Auto-Stop**:
+   * Automatically terminates background tasks and cleans up storage if the target tab is closed by the user.
 
 ---
 
@@ -9,10 +28,11 @@
 ```
 AutoClickerPAM/
 ├── manifest.json       # Manifest V3 config
-├── background.js       # Service Worker (alarm + scripting)
-├── popup.html          # Extension UI Popup
-├── popup.js            # UI Popup Logic
-└── icons/
+├── background.js       # Service Worker (alarm management & scripting coordination)
+├── popup.html          # Light, clean, dark-themed HTML user interface
+├── popup.js            # UI interactions, settings validation & state rendering
+├── BACKSTORY.md        # The problem statement and design rationale
+└── icons/              # Extension icons in standard resolutions
     ├── icon16.png
     ├── icon32.png
     ├── icon48.png
@@ -23,30 +43,26 @@ AutoClickerPAM/
 
 ## 🚀 Installation in Chrome
 
-1. Open Chrome and navigate to:
+1. Open Google Chrome and navigate to:
    ```
    chrome://extensions
    ```
-
-2. Enable **Developer Mode** (toggle in the top-right corner).
-
-3. Click the **"Load unpacked"** button.
-
-4. Select the `AutoClickerPAM` folder (the folder containing `manifest.json`).
-
-5. The extension will appear in your Chrome toolbar.
+2. Enable **Developer Mode** (toggle switch in the top-right corner).
+3. Click the **"Load unpacked"** button in the top-left.
+4. Select the `AutoClickerPAM` directory (the folder containing `manifest.json`).
+5. Pin the extension to your Chrome toolbar for easy access.
 
 ---
 
 ## ⚙️ How to Use
 
-1. **Open the tab** you want to keep active (e.g., monitoring dashboard, meeting page, etc.).
-2. Click the **AutoClickerPAM** icon in the Chrome toolbar.
-3. Click the **Start** button — the extension will capture and save the currently active tab.
-4. Feel free to switch to other tabs. The extension will keep running in the background.
-5. Click **Stop** to end the session at any time.
-
-> **Note**: If the target tab is closed, the session will automatically stop.
+1. **Open the target tab** you wish to keep alive (e.g., an RDP session, monitoring page, or corporate portal).
+2. Click the **AutoClickerPAM** icon in the toolbar.
+3. Choose your preferred **Mode**:
+   * **Alarm Mode**: Set an interval of **60 seconds** or more.
+   * **Content Script Mode**: Set an interval between **5 seconds** and higher.
+4. Click **Start**. The extension will capture the tab, lock the settings UI, and show the active duration counter and interval progress bar.
+5. Click **Stop** at any time to end the session.
 
 ---
 
@@ -54,34 +70,32 @@ AutoClickerPAM/
 
 | Permission | Purpose |
 |---|---|
-| `alarms` | Triggers a tick every 60 seconds |
-| `storage` | Stores tabId, status, and start time |
-| `tabs` | Gets the active tab and monitors if the tab is closed |
-| `scripting` | Injects the activity simulation script into the target tab |
-| `activeTab` | Accesses the active tab when the popup is opened |
-| `<all_urls>` | Host permission so `scripting` can run on any tab |
+| `alarms` | Triggers background tick events for the Alarm Mode |
+| `storage` | Persists session configuration and active status across popup sessions |
+| `tabs` | Identifies active tab metadata and listens to tab closure / updates |
+| `scripting` | Coordinates injection of the simulation scripts |
+| `activeTab` | Temporarily grants access to the current page when clicked |
+| `<all_urls>` | Host permission allowing scripting injection on required web pages |
 
 ---
 
-## 🎯 Simulated Activities (Every 60 seconds)
+## 🎯 Simulated Activities (Every Tick)
 
-- ✅ `mousemove` — small random movement (0–50px)
-- ✅ `pointermove` — small random movement (0–50px)
-- ✅ `mouseover` — on the body element
-- ✅ `focus` — on the window object
-- ✅ Scroll 1px down and back up (after 200ms)
-- ❌ Does NOT click buttons or links
-- ❌ Does NOT modify page data
-- ❌ Does NOT submit forms
-- ❌ Does NOT refresh the page
+- ✅ **`mousemove`** — Small random cursor displacement (0–50px)
+- ✅ **`pointermove`** — Correlated pointer updates for modern web applications
+- ✅ **`mouseover`** — Dispatched on the `document.body`
+- ✅ **`focus`** — Dispatched on the `window` context
+- ✅ **Microscopic Scroll** — Scrolls exactly `1px` down and back up after 200ms
+- ❌ **NO Button Clicks** — Will not click random links or buttons
+- ❌ **NO Form Submissions** — Will not submit or alter input fields
+- ❌ **NO Hard Page Refreshes** — Keeps your current input and view state untouched
 
 ---
 
 ## 🔧 Troubleshooting
 
-**Extension cannot run on a specific tab?**
-- The extension cannot run on browser system pages: `chrome://`, `chrome-extension://`, `edge://`, `about:`.
-- Try it on a standard website tab (http:// or https://).
+* **Extension cannot run on a specific tab?**
+  * Chrome limits extensions from accessing system pages: `chrome://`, `chrome-extension://`, `edge://`, `about:`. Please run it on standard web pages (`http://` or `https://`).
+* **Popup shows connection error?**
+  * If you have recently updated or reloaded the extension, reload the active tab and re-open the popup UI.
 
-**Popup shows an error after reloading?**
-- Reload the extension in `chrome://extensions` and open the popup again.
