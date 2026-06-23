@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html>
+<head><title>Icon Generator</title></head>
+<body>
+<canvas id="c128" width="128" height="128"></canvas>
+<canvas id="c48" width="48" height="48"></canvas>
+<canvas id="c32" width="32" height="32"></canvas>
+<canvas id="c16" width="16" height="16"></canvas>
+<script>
+// Draw cursor icon on canvas
+function drawIcon(canvas) {
+  const s = canvas.width;
+  const ctx = canvas.getContext("2d");
+
+  // Background gradient
+  const bg = ctx.createLinearGradient(0, 0, s, s);
+  bg.addColorStop(0, "#1a1d2e");
+  bg.addColorStop(1, "#0f1117");
+  ctx.fillStyle = bg;
+  ctx.beginPath();
+  ctx.roundRect(0, 0, s, s, s * 0.18);
+  ctx.fill();
+
+  // Cursor shape (scaled to canvas size)
+  const scale = s / 128;
+  ctx.save();
+  ctx.scale(scale, scale);
+
+  const grad = ctx.createLinearGradient(24, 14, 80, 80);
+  grad.addColorStop(0, "#63cab7");
+  grad.addColorStop(1, "#7c8cf8");
+  ctx.fillStyle = grad;
+
+  // Cursor path (128px reference)
+  ctx.beginPath();
+  ctx.moveTo(32, 14);
+  ctx.lineTo(32, 86);
+  ctx.lineTo(47, 71);
+  ctx.lineTo(62, 100);
+  ctx.lineTo(72, 95);
+  ctx.lineTo(57, 66);
+  ctx.lineTo(76, 63);
+  ctx.closePath();
+  ctx.fill();
+
+  // Glow dot
+  const glow = ctx.createRadialGradient(54, 55, 0, 54, 55, 20);
+  glow.addColorStop(0, "rgba(99,202,183,0.35)");
+  glow.addColorStop(1, "rgba(99,202,183,0)");
+  ctx.fillStyle = glow;
+  ctx.beginPath();
+  ctx.arc(54, 55, 20, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.restore();
+}
+
+const sizes = [128, 48, 32, 16];
+sizes.forEach(s => {
+  const canvas = document.getElementById("c" + s);
+  drawIcon(canvas);
+  const link = document.createElement("a");
+  link.download = "icon" + s + ".png";
+  link.href = canvas.toDataURL("image/png");
+  link.textContent = "Download icon" + s + ".png";
+  link.style.display = "block";
+  link.style.margin = "8px";
+  document.body.appendChild(link);
+});
+</script>
+</body>
+</html>
