@@ -263,6 +263,56 @@
         display: block;
       }
 
+      /* Active Sessions List */
+      .session-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 6px 8px;
+        background: var(--bg-primary);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        font-size: 11px;
+        gap: 6px;
+      }
+
+      .session-info {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        min-width: 0;
+        flex: 1;
+      }
+
+      .session-title {
+        font-weight: 500;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        color: var(--text-primary);
+      }
+
+      .session-meta {
+        font-size: 9px;
+        color: var(--text-secondary);
+      }
+
+      .session-btn-stop {
+        background: none;
+        border: 1px solid rgba(248, 113, 113, 0.3);
+        color: var(--accent-red);
+        cursor: pointer;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-size: 9px;
+        font-weight: 600;
+        transition: background 0.1s;
+      }
+
+      .session-btn-stop:hover {
+        background: rgba(248, 113, 113, 0.1);
+      }
+
       /* Footer */
       .footer {
         text-align: center;
@@ -331,6 +381,17 @@
       <div class="btn-group">
         <button class="btn btn-start" id="btnStart">Start</button>
         <button class="btn btn-stop" id="btnStop" disabled>Stop</button>
+      </div>
+
+      <!-- Other Active Tabs -->
+      <div class="card" id="sessionsCard" style="display: none; margin-top: 4px;">
+        <div class="card-title" style="display: flex; justify-content: space-between; align-items: center;">
+          <span>Other Active Tabs</span>
+          <button id="btnStopAll" style="background: none; border: none; color: var(--accent-red); font-size: 10px; cursor: pointer; text-transform: uppercase; font-weight: 700; padding: 2px 4px;">Stop All</button>
+        </div>
+        <div id="sessionsList" style="display: flex; flex-direction: column; gap: 6px; margin-top: 6px;">
+          <!-- Dynamically populated rows -->
+        </div>
       </div>
 
       <!-- Footer -->

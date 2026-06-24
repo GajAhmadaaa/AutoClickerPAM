@@ -3,7 +3,7 @@
 // Manifest V3 | chrome.alarms + chrome.scripting
 // ============================================================
 
-const ALARM_NAME = "autoClickerPAM_tick";
+const ALARM_PREFIX = "autoClickerPAM_alarm_";
 
 // ------------------------------------------------------------
 // Helper: Log with prefix
@@ -77,6 +77,9 @@ function startContentScriptInterval(intervalSec) {
   console.log(`[AutoClickerPAM] Keep-alive interval set to ${intervalSec}s.`);
 }
 
+// ------------------------------------------------------------
+// Stop script injected into target tab for Content Script Mode
+// ------------------------------------------------------------
 function stopContentScriptInterval() {
   if (window.pamAutoClickerInterval) {
     clearInterval(window.pamAutoClickerInterval);
@@ -141,27 +144,33 @@ function simulateActivity() {
 // Start session
 // ------------------------------------------------------------
 async function startSession(tabId, tabTitle, mode, interval) {
-  await chrome.storage.local.set({
-    isActive: true,
-    targetTabId: tabId,
-    targetTabTitle: tabTitle,
+  const storage = await chrome.storage.local.get("activeSessions");
+  const activeSessions = storage.activeSessions || {};
+
+  activeSessions[tabId] = {
+    tabId: tabId,
+    tabTitle: tabTitle,
     startedAt: Date.now(),
     mode: mode,
     interval: interval
-  });
+  };
+
+  await chrome.storage.local.set({ activeSessions });
+
+  const alarmName = `${ALARM_PREFIX}${tabId}`;
 
   if (mode === "alarm") {
     // Clear old alarm if exists, then create a new one
-    await chrome.alarms.clear(ALARM_NAME);
+    await chrome.alarms.clear(alarmName);
     const periodMinutes = interval / 60;
-    chrome.alarms.create(ALARM_NAME, {
+    chrome.alarms.create(alarmName, {
       delayInMinutes: periodMinutes,
       periodInMinutes: periodMinutes,
     });
     log(`Session started (Alarm Mode). Tab: "${tabTitle}" (ID: ${tabId}). Interval: ${interval}s`);
   } else {
     // Content script mode (direct injection)
-    await chrome.alarms.clear(ALARM_NAME); // Ensure alarm is clean
+    await chrome.alarms.clear(alarmName); // Ensure alarm is clean
     try {
       await chrome.scripting.executeScript({
         target: { tabId: tabId, allFrames: true },
@@ -179,61 +188,62 @@ async function startSession(tabId, tabTitle, mode, interval) {
 // ------------------------------------------------------------
 // Stop session — clear storage & alarm/interval
 // ------------------------------------------------------------
-async function stopSession(reason = "manual") {
-  const data = await chrome.storage.local.get(["mode", "targetTabId"]);
+async function stopSession(tabId, reason = "manual") {
+  const storage = await chrome.storage.local.get("activeSessions");
+  const activeSessions = storage.activeSessions || {};
 
-  // Clear any background alarm
-  await chrome.alarms.clear(ALARM_NAME);
+  const session = activeSessions[tabId];
+  if (!session) {
+    log(`Stop session requested for Tab ID ${tabId} but no active session found.`);
+    return;
+  }
+
+  const alarmName = `${ALARM_PREFIX}${tabId}`;
+  await chrome.alarms.clear(alarmName);
 
   // Clear content script interval if running
-  if (data.mode === "content_script" && data.targetTabId) {
+  if (session.mode === "content_script") {
     try {
       await chrome.scripting.executeScript({
-        target: { tabId: data.targetTabId, allFrames: true },
+        target: { tabId: tabId, allFrames: true },
         func: stopContentScriptInterval
       });
     } catch (err) {
-      log(`Failed to execute stop script (tab might be closed): ${err.message}`);
+      log(`Failed to execute stop script for Tab ID ${tabId} (tab might be closed): ${err.message}`);
     }
   }
 
-  await chrome.storage.local.set({
-    isActive: false,
-    targetTabId: null,
-    targetTabTitle: null,
-    mode: null,
-    interval: null
-  });
-  log(`Session stopped. Reason: ${reason}`);
+  delete activeSessions[tabId];
+  await chrome.storage.local.set({ activeSessions });
+  log(`Session stopped for Tab ID ${tabId}. Reason: ${reason}`);
 }
 
 // ------------------------------------------------------------
 // Main handler when alarm fires (Only for Alarm Mode)
 // ------------------------------------------------------------
 async function handleAlarm(alarm) {
-  if (alarm.name !== ALARM_NAME) return;
+  if (!alarm.name.startsWith(ALARM_PREFIX)) return;
 
-  const data = await chrome.storage.local.get([
-    "isActive",
-    "targetTabId",
-    "targetTabTitle",
-  ]);
+  const tabId = parseInt(alarm.name.replace(ALARM_PREFIX, ""), 10);
+  if (isNaN(tabId)) return;
 
-  if (!data.isActive || data.targetTabId == null) {
-    log("Alarm fired but session is inactive. Clearing alarm.");
-    await chrome.alarms.clear(ALARM_NAME);
+  const storage = await chrome.storage.local.get("activeSessions");
+  const activeSessions = storage.activeSessions || {};
+  const session = activeSessions[tabId];
+
+  if (!session) {
+    log(`Alarm fired for inactive session (Tab ID: ${tabId}). Clearing alarm.`);
+    await chrome.alarms.clear(alarm.name);
     return;
   }
-
-  const targetTabId = data.targetTabId;
 
   // Check if tab still exists
   let tab;
   try {
-    tab = await chrome.tabs.get(targetTabId);
+    tab = await chrome.tabs.get(tabId);
   } catch (_) {
-    log(`Tab ID ${targetTabId} has been closed. Automatically stopping session.`);
-    await stopSession("tab closed");
+    log(`Tab ID ${tabId} has been closed. Automatically stopping session.`);
+    await stopSession(tabId, "tab closed");
     return;
   }
 
@@ -243,21 +253,21 @@ async function handleAlarm(alarm) {
     return;
   }
 
-  log(`Running activity simulation on tab: "${tab.title}" (ID: ${targetTabId})`);
+  log(`Running activity simulation on tab: "${tab.title}" (ID: ${tabId})`);
 
   try {
     await chrome.scripting.executeScript({
-      target: { tabId: targetTabId, allFrames: true },
+      target: { tabId: tabId, allFrames: true },
       func: simulateActivity,
     });
-    log("Activity simulation successfully executed.");
+    log(`Activity simulation successfully executed on Tab ID: ${tabId}`);
   } catch (err) {
-    log(`Failed to execute script: ${err.message}`);
+    log(`Failed to execute script on Tab ID ${tabId}: ${err.message}`);
     if (
       err.message.includes("Cannot access") ||
       err.message.includes("No tab with id")
     ) {
-      await stopSession("tab inaccessible");
+      await stopSession(tabId, "tab inaccessible");
     }
   }
 }
@@ -306,7 +316,16 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
   if (message.action === "STOP") {
     (async () => {
-      await stopSession("manual");
+      const tabId = message.tabId;
+      if (tabId === "all") {
+        const storage = await chrome.storage.local.get("activeSessions");
+        const activeSessions = storage.activeSessions || {};
+        for (const id of Object.keys(activeSessions)) {
+          await stopSession(parseInt(id, 10), "manual_all");
+        }
+      } else if (tabId) {
+        await stopSession(parseInt(tabId, 10), "manual");
+      }
       sendResponse({ success: true });
     })();
     return true;
@@ -314,15 +333,21 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
   if (message.action === "GET_STATUS") {
     (async () => {
-      const data = await chrome.storage.local.get([
-        "isActive",
-        "targetTabId",
-        "targetTabTitle",
-        "startedAt",
-        "mode",
-        "interval"
-      ]);
-      sendResponse(data);
+      const [activeTab] = await chrome.tabs.query({
+        active: true,
+        lastFocusedWindow: true,
+      });
+      const currentTabId = activeTab ? activeTab.id : null;
+      const currentTabTitle = activeTab ? activeTab.title : "";
+
+      const storage = await chrome.storage.local.get("activeSessions");
+      const activeSessions = storage.activeSessions || {};
+
+      sendResponse({
+        currentTabId: currentTabId,
+        currentTabTitle: currentTabTitle,
+        activeSessions: activeSessions
+      });
     })();
     return true;
   }
@@ -334,13 +359,14 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 chrome.alarms.onAlarm.addListener(handleAlarm);
 
 // ------------------------------------------------------------
-// Listener: When tab is closed — auto-stop if it is the target tab
+// Listener: When tab is closed — auto-stop if it is in activeSessions
 // ------------------------------------------------------------
 chrome.tabs.onRemoved.addListener(async (tabId) => {
-  const data = await chrome.storage.local.get(["isActive", "targetTabId"]);
-  if (data.isActive && data.targetTabId === tabId) {
+  const storage = await chrome.storage.local.get("activeSessions");
+  const activeSessions = storage.activeSessions || {};
+  if (activeSessions[tabId]) {
     log(`Target tab (ID: ${tabId}) closed by user. Stopping session.`);
-    await stopSession("target tab closed");
+    await stopSession(tabId, "tab closed");
   }
 });
 
@@ -349,14 +375,16 @@ chrome.tabs.onRemoved.addListener(async (tabId) => {
 // ------------------------------------------------------------
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
   if (changeInfo.status === "complete") {
-    const data = await chrome.storage.local.get(["isActive", "targetTabId", "mode", "interval"]);
-    if (data.isActive && data.mode === "content_script" && data.targetTabId === tabId) {
+    const storage = await chrome.storage.local.get("activeSessions");
+    const activeSessions = storage.activeSessions || {};
+    const session = activeSessions[tabId];
+    if (session && session.mode === "content_script") {
       log(`Target tab (ID: ${tabId}) reloaded. Re-injecting interval script.`);
       try {
         await chrome.scripting.executeScript({
           target: { tabId: tabId, allFrames: true },
           func: startContentScriptInterval,
-          args: [data.interval]
+          args: [session.interval]
         });
       } catch (err) {
         log(`Failed to re-inject script on reload: ${err.message}`);

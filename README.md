@@ -8,18 +8,22 @@
 
 ## ⚡ Key Features
 
-1. **Dual Activation Modes**:
+1. **Concurrent Multi-Tab Support**:
+   * Run independent keep-alive sessions on multiple tabs simultaneously.
+   * The popup dynamically displays status controls for the current tab, while listing all other active background sessions at the bottom.
+   * Stop individual background tabs directly from the popup list, or stop all sessions at once with the **Stop All** command.
+2. **Dual Activation Modes**:
    * **Alarm Mode (Min. 60s)**: Uses Chrome's background `alarms` API. It is highly battery-efficient and runs execution in the background at regular intervals (minimum 60 seconds due to Chrome limit).
    * **Content Script Mode (Min. 5s)**: Directly injects a script into the target page. Allows shorter, customizable intervals (minimum 5 seconds) for systems with aggressive session timeouts.
-2. **Reload Resilience**:
+3. **Reload Resilience**:
    * If you refresh or reload the target tab while **Content Script Mode** is active, the extension automatically detects the update and re-injects the keep-alive loop. No manual restart is required.
-3. **Safe Simulation**:
+4. **Safe Simulation**:
    * Simulates light, natural user activities every tick without modifying page data, clicking elements, or initiating page reloads.
-4. **Minimal Dark-Themed UI**:
+5. **Minimal Dark-Themed UI**:
    * High performance, distraction-free control panel.
    * Displays the active target tab name, elapsed duration timer, and real-time visual progress bar tracking the current interval.
-5. **Smart Auto-Stop**:
-   * Automatically terminates background tasks and cleans up storage if the target tab is closed by the user.
+6. **Smart Auto-Stop**:
+   * Automatically terminates background tasks and cleans up storage if a target tab is closed by the user.
 
 ---
 

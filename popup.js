@@ -20,11 +20,17 @@ const errorMsg      = document.getElementById("errorMsg");
 const btnStart      = document.getElementById("btnStart");
 const btnStop       = document.getElementById("btnStop");
 
+// DOM References for Other Active Tabs list
+const sessionsCard  = document.getElementById("sessionsCard");
+const sessionsList  = document.getElementById("sessionsList");
+const btnStopAll    = document.getElementById("btnStopAll");
+
 // Local popup state
 let timerInterval    = null;
 let progressInterval = null;
 let sessionStartedAt = null;
 let activeIntervalMs = 60000;
+let currentTabId     = null;
 
 // Handle Mode selection change
 modeSelect.addEventListener("change", () => {
@@ -53,28 +59,31 @@ function saveSettings() {
 
 // Render UI based on session status
 function renderUI(data) {
-  const isActive = data.isActive === true;
+  currentTabId = data.currentTabId;
+  const activeSessions = data.activeSessions || {};
+  const currentSession = currentTabId ? activeSessions[currentTabId] : null;
+  const isCurrentActive = !!currentSession;
 
   // Status Badge
-  statusBadge.className = "status-badge" + (isActive ? " active" : "");
-  statusText.textContent = isActive ? "Active" : "Inactive";
+  statusBadge.className = "status-badge" + (isCurrentActive ? " active" : "");
+  statusText.textContent = isCurrentActive ? "Active" : "Inactive";
 
-  // Toggle Visibility of Settings vs Info
-  configCard.style.display = isActive ? "none" : "block";
-  tabCard.style.display    = isActive ? "block" : "none";
-  timerCard.style.display  = isActive ? "flex" : "none";
+  // Toggle Visibility of Settings vs Info for Current Tab
+  configCard.style.display = isCurrentActive ? "none" : "block";
+  tabCard.style.display    = isCurrentActive ? "block" : "none";
+  timerCard.style.display  = isCurrentActive ? "flex" : "none";
 
   // Tab Title
-  if (isActive && data.targetTabTitle) {
-    tabTitle.textContent = data.targetTabTitle;
+  if (isCurrentActive) {
+    tabTitle.textContent = currentSession.tabTitle || data.currentTabTitle || "Current Tab";
   } else {
     tabTitle.textContent = "—";
   }
 
-  // Timer & Progress Bar
-  if (isActive && data.startedAt) {
-    sessionStartedAt = data.startedAt;
-    activeIntervalMs = (data.interval || 60) * 1000;
+  // Timer & Progress Bar for Current Tab
+  if (isCurrentActive && currentSession.startedAt) {
+    sessionStartedAt = currentSession.startedAt;
+    activeIntervalMs = (currentSession.interval || 60) * 1000;
     startTimerInterval();
     startProgressBar();
   } else {
@@ -84,9 +93,65 @@ function renderUI(data) {
     clearProgressInterval();
   }
 
-  // Buttons
-  btnStart.disabled = isActive;
-  btnStop.disabled  = !isActive;
+  // Buttons for Current Tab
+  btnStart.disabled = isCurrentActive;
+  btnStop.disabled  = !isCurrentActive;
+
+  // --- Render Other Active Sessions List ---
+  const sessionIds = Object.keys(activeSessions);
+  const otherSessionIds = sessionIds.filter(id => parseInt(id, 10) !== currentTabId);
+
+  if (otherSessionIds.length > 0) {
+    sessionsCard.style.display = "block";
+    sessionsList.innerHTML = "";
+
+    otherSessionIds.forEach(id => {
+      const sess = activeSessions[id];
+      const modeLabel = sess.mode === "content_script" ? "CS" : "Alarm";
+      const itemEl = document.createElement("div");
+      itemEl.className = "session-item";
+
+      const infoEl = document.createElement("div");
+      infoEl.className = "session-info";
+
+      const titleEl = document.createElement("span");
+      titleEl.className = "session-title";
+      titleEl.textContent = sess.tabTitle || `Tab ${id}`;
+      titleEl.title = sess.tabTitle || `Tab ${id}`;
+
+      const metaEl = document.createElement("span");
+      metaEl.className = "session-meta";
+      metaEl.textContent = `Mode: ${modeLabel} | Int: ${sess.interval}s`;
+
+      infoEl.appendChild(titleEl);
+      infoEl.appendChild(metaEl);
+
+      const stopBtn = document.createElement("button");
+      stopBtn.className = "session-btn-stop";
+      stopBtn.textContent = "Stop";
+      stopBtn.addEventListener("click", () => {
+        stopBtn.disabled = true;
+        chrome.runtime.sendMessage({ action: "STOP", tabId: id }, (response) => {
+          loadStatus();
+        });
+      });
+
+      itemEl.appendChild(infoEl);
+      itemEl.appendChild(stopBtn);
+
+      sessionsList.appendChild(itemEl);
+    });
+
+    // "Stop All" button visibility
+    if (sessionIds.length > 1) {
+      btnStopAll.style.display = "block";
+    } else {
+      btnStopAll.style.display = "none";
+    }
+  } else {
+    sessionsCard.style.display = "none";
+    sessionsList.innerHTML = "";
+  }
 }
 
 // Show error
@@ -189,10 +254,11 @@ btnStart.addEventListener("click", () => {
   });
 });
 
-// Event: Stop Button
+// Event: Stop Button (for current tab)
 btnStop.addEventListener("click", () => {
+  if (!currentTabId) return;
   clearError();
-  chrome.runtime.sendMessage({ action: "STOP" }, (response) => {
+  chrome.runtime.sendMessage({ action: "STOP", tabId: currentTabId }, (response) => {
     if (chrome.runtime.lastError) {
       showError("Connection to background failed.");
       return;
@@ -203,6 +269,20 @@ btnStop.addEventListener("click", () => {
       return;
     }
 
+    loadStatus();
+  });
+});
+
+// Event: Stop All Button
+btnStopAll.addEventListener("click", () => {
+  clearError();
+  btnStopAll.disabled = true;
+  chrome.runtime.sendMessage({ action: "STOP", tabId: "all" }, (response) => {
+    btnStopAll.disabled = false;
+    if (chrome.runtime.lastError) {
+      showError("Connection to background failed.");
+      return;
+    }
     loadStatus();
   });
 });
@@ -224,10 +304,17 @@ function loadStatus() {
   // Get current active session status
   chrome.runtime.sendMessage({ action: "GET_STATUS" }, (data) => {
     if (chrome.runtime.lastError || !data) {
-      chrome.storage.local.get(
-        ["isActive", "targetTabId", "targetTabTitle", "startedAt", "interval", "mode"],
-        (stored) => renderUI(stored || {})
-      );
+      chrome.storage.local.get("activeSessions", (stored) => {
+        chrome.tabs.query({ active: true, lastFocusedWindow: true }, ([activeTab]) => {
+          const tabId = activeTab ? activeTab.id : null;
+          const tabTitle = activeTab ? activeTab.title : "";
+          renderUI({
+            currentTabId: tabId,
+            currentTabTitle: tabTitle,
+            activeSessions: stored.activeSessions || {}
+          });
+        });
+      });
       return;
     }
     renderUI(data);
@@ -236,7 +323,7 @@ function loadStatus() {
 
 // Listen for storage changes (auto-update if tab closed, etc.)
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === "local" && ("isActive" in changes || "targetTabId" in changes)) {
+  if (area === "local" && "activeSessions" in changes) {
     loadStatus();
   }
 });
