@@ -22,67 +22,25 @@ function startContentScriptInterval(intervalSec) {
 
   function simulateActivity() {
     try {
-      const randomSmall = (max) => Math.floor(Math.random() * max);
-
-      // --- Random small mousemove ---
-      const mouseMoveEvent = new MouseEvent("mousemove", {
-        bubbles: true,
-        cancelable: true,
-        clientX: randomSmall(50),
-        clientY: randomSmall(50),
-      });
-      document.dispatchEvent(mouseMoveEvent);
-
-      // --- Random small pointermove ---
-      const pointerMoveEvent = new PointerEvent("pointermove", {
-        bubbles: true,
-        cancelable: true,
-        clientX: randomSmall(50),
-        clientY: randomSmall(50),
-      });
-      document.dispatchEvent(pointerMoveEvent);
-
-      // --- Mouseover on body element ---
-      const mouseOverEvent = new MouseEvent("mouseover", {
-        bubbles: true,
-        cancelable: true,
-      });
-      document.body.dispatchEvent(mouseOverEvent);
-
-      // --- Harmless Keyboard Event (Shift) ---
-      const keydownEvent = new KeyboardEvent("keydown", {
-        bubbles: true,
-        cancelable: true,
-        key: "Shift",
-        code: "ShiftLeft",
-        keyCode: 16,
-        which: 16
-      });
-      
-      const keyupEvent = new KeyboardEvent("keyup", {
-        bubbles: true,
-        cancelable: true,
-        key: "Shift",
-        code: "ShiftLeft",
-        keyCode: 16,
-        which: 16
-      });
-      
-      // Dispatch to canvas if available (often used by PAM/RDP clients like Guacamole)
-      const target = document.querySelector("canvas") || document.activeElement || document.body;
-      target.dispatchEvent(keydownEvent);
-      target.dispatchEvent(keyupEvent);
-
-      // --- Focus event on window ---
-      const focusEvent = new Event("focus", { bubbles: false });
-      window.dispatchEvent(focusEvent);
-
-      // --- Scroll 1px down and then back ---
-      const currentScrollY = window.scrollY;
-      window.scrollTo(0, currentScrollY + 1);
-      setTimeout(() => {
-        window.scrollTo(0, currentScrollY);
-      }, 200);
+      // --- ManageEngine PAM360 ($rdp API) ---
+      if (typeof window.$rdp !== "undefined") {
+        try {
+          if (typeof window.$rdp.writeScancode === "function") {
+            window.$rdp.writeScancode(42, true); // Left Shift down
+            setTimeout(() => {
+              if (typeof window.$rdp !== "undefined" && typeof window.$rdp.writeScancode === "function") {
+                  window.$rdp.writeScancode(42, false); // Left Shift up
+              }
+            }, 30);
+          }
+          if (typeof window.$rdp.mouseMove === "function") {
+            const randomSmall = (max) => Math.floor(Math.random() * max);
+            window.$rdp.mouseMove(randomSmall(50), randomSmall(50));
+          }
+        } catch (err) {
+          console.error("[AutoClickerPAM] Error calling $rdp API:", err);
+        }
+      }
 
       console.log(
         "[AutoClickerPAM] Light activity simulated (Content Script Mode):",
@@ -117,67 +75,25 @@ function stopContentScriptInterval() {
 // ------------------------------------------------------------
 function simulateActivity() {
   try {
-    const randomSmall = (max) => Math.floor(Math.random() * max);
-
-    // --- Random small mousemove ---
-    const mouseMoveEvent = new MouseEvent("mousemove", {
-      bubbles: true,
-      cancelable: true,
-      clientX: randomSmall(50),
-      clientY: randomSmall(50),
-    });
-    document.dispatchEvent(mouseMoveEvent);
-
-    // --- Random small pointermove ---
-    const pointerMoveEvent = new PointerEvent("pointermove", {
-      bubbles: true,
-      cancelable: true,
-      clientX: randomSmall(50),
-      clientY: randomSmall(50),
-    });
-    document.dispatchEvent(pointerMoveEvent);
-
-    // --- Mouseover on body element ---
-    const mouseOverEvent = new MouseEvent("mouseover", {
-      bubbles: true,
-      cancelable: true,
-    });
-    document.body.dispatchEvent(mouseOverEvent);
-
-    // --- Harmless Keyboard Event (Shift) ---
-    const keydownEvent = new KeyboardEvent("keydown", {
-      bubbles: true,
-      cancelable: true,
-      key: "Shift",
-      code: "ShiftLeft",
-      keyCode: 16,
-      which: 16
-    });
-    
-    const keyupEvent = new KeyboardEvent("keyup", {
-      bubbles: true,
-      cancelable: true,
-      key: "Shift",
-      code: "ShiftLeft",
-      keyCode: 16,
-      which: 16
-    });
-    
-    // Dispatch to canvas if available (often used by PAM/RDP clients like Guacamole)
-    const target = document.querySelector("canvas") || document.activeElement || document.body;
-    target.dispatchEvent(keydownEvent);
-    target.dispatchEvent(keyupEvent);
-
-    // --- Focus event on window ---
-    const focusEvent = new Event("focus", { bubbles: false });
-    window.dispatchEvent(focusEvent);
-
-    // --- Scroll 1px down and then back ---
-    const currentScrollY = window.scrollY;
-    window.scrollTo(0, currentScrollY + 1);
-    setTimeout(() => {
-      window.scrollTo(0, currentScrollY);
-    }, 200);
+    // --- ManageEngine PAM360 ($rdp API) ---
+    if (typeof window.$rdp !== "undefined") {
+      try {
+        if (typeof window.$rdp.writeScancode === "function") {
+          window.$rdp.writeScancode(42, true); // Left Shift down
+          setTimeout(() => {
+            if (typeof window.$rdp !== "undefined" && typeof window.$rdp.writeScancode === "function") {
+                window.$rdp.writeScancode(42, false); // Left Shift up
+            }
+          }, 30);
+        }
+        if (typeof window.$rdp.mouseMove === "function") {
+          const randomSmall = (max) => Math.floor(Math.random() * max);
+          window.$rdp.mouseMove(randomSmall(50), randomSmall(50));
+        }
+      } catch (err) {
+        console.error("[AutoClickerPAM] Error calling $rdp API:", err);
+      }
+    }
 
     console.log(
       "[AutoClickerPAM] Light activity simulated (Alarm Mode):",
@@ -223,7 +139,8 @@ async function startSession(tabId, tabTitle, mode, interval) {
       await chrome.scripting.executeScript({
         target: { tabId: tabId, allFrames: true },
         func: startContentScriptInterval,
-        args: [interval]
+        args: [interval],
+        world: "MAIN" // Inject into page context to access window.$rdp
       });
       log(`Session started (Content Script Mode). Tab: "${tabTitle}" (ID: ${tabId}). Interval: ${interval}s`);
     } catch (err) {
@@ -254,7 +171,8 @@ async function stopSession(tabId, reason = "manual") {
     try {
       await chrome.scripting.executeScript({
         target: { tabId: tabId, allFrames: true },
-        func: stopContentScriptInterval
+        func: stopContentScriptInterval,
+        world: "MAIN" // Must match the world where we injected
       });
     } catch (err) {
       log(`Failed to execute stop script for Tab ID ${tabId} (tab might be closed): ${err.message}`);
@@ -307,6 +225,7 @@ async function handleAlarm(alarm) {
     await chrome.scripting.executeScript({
       target: { tabId: tabId, allFrames: true },
       func: simulateActivity,
+      world: "MAIN" // Inject into page context to access window.$rdp
     });
     log(`Activity simulation successfully executed on Tab ID: ${tabId}`);
   } catch (err) {
@@ -432,7 +351,8 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
         await chrome.scripting.executeScript({
           target: { tabId: tabId, allFrames: true },
           func: startContentScriptInterval,
-          args: [session.interval]
+          args: [session.interval],
+          world: "MAIN"
         });
       } catch (err) {
         log(`Failed to re-inject script on reload: ${err.message}`);

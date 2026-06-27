@@ -85,11 +85,9 @@ AutoClickerPAM/
 
 ## 🎯 Simulated Activities (Every Tick)
 
-- ✅ **`mousemove`** — Small random cursor displacement (0–50px)
-- ✅ **`pointermove`** — Correlated pointer updates for modern web applications
-- ✅ **`mouseover`** — Dispatched on the `document.body`
-- ✅ **`focus`** — Dispatched on the `window` context
-- ✅ **Microscopic Scroll** — Scrolls exactly `1px` down and back up after 200ms
+- ✅ **ManageEngine PAM360 Internal API (`$rdp`)** — Injects directly into the target page's `MAIN` execution environment.
+- ✅ **`$rdp.writeScancode`** — Simulates a lightweight keyboard press (e.g., Left Shift).
+- ✅ **`$rdp.mouseMove`** — Simulates microscopic internal mouse coordinates.
 - ❌ **NO Button Clicks** — Will not click random links or buttons
 - ❌ **NO Form Submissions** — Will not submit or alter input fields
 - ❌ **NO Hard Page Refreshes** — Keeps your current input and view state untouched
