@@ -49,6 +49,30 @@ function startContentScriptInterval(intervalSec) {
       });
       document.body.dispatchEvent(mouseOverEvent);
 
+      // --- Harmless Keyboard Event (Shift) ---
+      const keydownEvent = new KeyboardEvent("keydown", {
+        bubbles: true,
+        cancelable: true,
+        key: "Shift",
+        code: "ShiftLeft",
+        keyCode: 16,
+        which: 16
+      });
+      
+      const keyupEvent = new KeyboardEvent("keyup", {
+        bubbles: true,
+        cancelable: true,
+        key: "Shift",
+        code: "ShiftLeft",
+        keyCode: 16,
+        which: 16
+      });
+      
+      // Dispatch to canvas if available (often used by PAM/RDP clients like Guacamole)
+      const target = document.querySelector("canvas") || document.activeElement || document.body;
+      target.dispatchEvent(keydownEvent);
+      target.dispatchEvent(keyupEvent);
+
       // --- Focus event on window ---
       const focusEvent = new Event("focus", { bubbles: false });
       window.dispatchEvent(focusEvent);
@@ -119,6 +143,30 @@ function simulateActivity() {
       cancelable: true,
     });
     document.body.dispatchEvent(mouseOverEvent);
+
+    // --- Harmless Keyboard Event (Shift) ---
+    const keydownEvent = new KeyboardEvent("keydown", {
+      bubbles: true,
+      cancelable: true,
+      key: "Shift",
+      code: "ShiftLeft",
+      keyCode: 16,
+      which: 16
+    });
+    
+    const keyupEvent = new KeyboardEvent("keyup", {
+      bubbles: true,
+      cancelable: true,
+      key: "Shift",
+      code: "ShiftLeft",
+      keyCode: 16,
+      which: 16
+    });
+    
+    // Dispatch to canvas if available (often used by PAM/RDP clients like Guacamole)
+    const target = document.querySelector("canvas") || document.activeElement || document.body;
+    target.dispatchEvent(keydownEvent);
+    target.dispatchEvent(keyupEvent);
 
     // --- Focus event on window ---
     const focusEvent = new Event("focus", { bubbles: false });
