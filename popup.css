@@ -1,0 +1,317 @@
+/* ================================================
+   Reset & Base (Super Light)
+================================================ */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --bg-primary: #121214;
+  --bg-card: #1a1a1e;
+  --border: #2e2e33;
+  --border-active: #4ade80;
+  --accent-green: #4ade80;
+  --accent-red: #f87171;
+  --accent-blue: #3b82f6;
+  --text-primary: #f4f4f5;
+  --text-secondary: #a1a1aa;
+  --text-muted: #52525b;
+  --radius: 6px;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  width: 300px;
+  padding: 14px;
+  font-size: 13px;
+}
+
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* ================================================
+   Header & Status
+================================================ */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 8px;
+}
+
+.logo-text h1 {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.logo-text p {
+  font-size: 10px;
+  color: var(--text-secondary);
+}
+
+.status-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.status-badge.active {
+  border-color: var(--border-active);
+  color: var(--accent-green);
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+
+.status-badge.active .status-dot {
+  background: var(--accent-green);
+}
+
+/* ================================================
+   Cards
+================================================ */
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+}
+
+.card-title {
+  font-size: 10px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.tab-title {
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.timer-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.timer-value {
+  font-weight: 700;
+  font-family: monospace;
+  font-size: 14px;
+  color: var(--accent-blue);
+}
+
+/* ================================================
+   Configuration Panel (Simple Forms)
+================================================ */
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.form-row {
+  display: flex;
+  gap: 8px;
+}
+
+.form-field {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+select, input {
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  border-radius: var(--radius);
+  padding: 6px 8px;
+  font-family: inherit;
+  font-size: 12px;
+  outline: none;
+  width: 100%;
+}
+
+select:focus, input:focus {
+  border-color: var(--accent-blue);
+}
+
+.input-hint {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+/* ================================================
+   Progress Bar
+================================================ */
+.progress-bar-wrap {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 2px;
+  height: 3px;
+  overflow: hidden;
+  display: none;
+}
+
+.progress-bar-wrap.visible {
+  display: block;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: var(--accent-blue);
+  width: 0%;
+}
+
+/* ================================================
+   Buttons & Errors
+================================================ */
+.btn-group {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.btn {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  transition: background 0.1s, border-color 0.1s;
+}
+
+.btn:hover:not(:disabled) {
+  background: #25252a;
+}
+
+.btn:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.btn-start {
+  border-color: rgba(74, 222, 128, 0.3);
+  color: var(--accent-green);
+}
+
+.btn-stop {
+  border-color: rgba(248, 113, 113, 0.3);
+  color: var(--accent-red);
+}
+
+.error-msg {
+  background: rgba(248, 113, 113, 0.1);
+  border: 1px solid rgba(248, 113, 113, 0.2);
+  color: var(--accent-red);
+  border-radius: var(--radius);
+  padding: 6px 10px;
+  font-size: 11px;
+  display: none;
+}
+
+.error-msg.visible {
+  display: block;
+}
+
+/* Active Sessions List */
+.session-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 8px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 11px;
+  gap: 6px;
+}
+
+.session-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.session-title {
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-primary);
+}
+
+.session-meta {
+  font-size: 9px;
+  color: var(--text-secondary);
+}
+
+.session-btn-stop {
+  background: none;
+  border: 1px solid rgba(248, 113, 113, 0.3);
+  color: var(--accent-red);
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 9px;
+  font-weight: 600;
+  transition: background 0.1s;
+}
+
+.session-btn-stop:hover {
+  background: rgba(248, 113, 113, 0.1);
+}
+
+/* Footer */
+.footer {
+  text-align: center;
+  font-size: 10px;
+  color: var(--text-muted);
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+  margin-top: 4px;
+}

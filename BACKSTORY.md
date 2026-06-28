@@ -38,9 +38,8 @@ The **AutoClickerPAM** extension was designed as a smart, secure, and non-intrus
    Only works on the target tab manually selected by the user. You can work in other tabs, chat on Teams/Slack, or use other apps without disruption.
 2. **Non-Intrusive Micro-Activity Simulation**:
    The extension **never** clicks buttons, alters data, submits forms, or reloads pages. It only simulates micro-activities:
-   * Microscopic random mouse/pointer movements (0–50px)
-   * A `focus` event on the window
-   * Scrolling 1px down and back up within 200ms
+   * Lightweight keyboard press via `$rdp.writeScancode` (Left Shift down/up)
+   * Microscopic random mouse movements via `$rdp.mouseMove` (0–50px)
 3. **Multiframe Compatibility (`allFrames: true`)**:
    Since RDP/SSH PAM360 sessions are rendered within nested `iframes`, the extension injects simulation events into the main page *and* all child `iframes`. These events are forwarded by the HTML5 gateway to the target Windows Server, preventing idle timeouts both on the portal and the remote OS.
 4. **Resource-Efficient & Automated**:

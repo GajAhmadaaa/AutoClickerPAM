@@ -1,8 +1,8 @@
 # AutoClickerPAM — Chrome Extension Manifest V3
 
-> Keeps tabs active by automatically simulating light activity (`mousemove`, small scroll, `focus` event) without clicking buttons, submitting forms, or refreshing pages.
+> Keeps tabs active by automatically simulating light activity via PAM360's internal `$rdp` API (`writeScancode`, `mouseMove`) without clicking buttons, submitting forms, or refreshing pages.
 >
-> 📖 **Read the [Project Backstory](file:///d:/proj/AutoClickerPAM/BACKSTORY.md)** to learn about the specific RDP, PAM360, and Windows GPO session timeout problems this extension solves.
+> 📖 **Read the [Project Backstory](BACKSTORY.md)** to learn about the specific RDP, PAM360, and Windows GPO session timeout problems this extension solves.
 
 ---
 
