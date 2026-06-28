@@ -238,6 +238,10 @@ btnStart.addEventListener("click", () => {
     showError("Content script interval must be at least 5s.");
     return;
   }
+  if (interval > 3600) {
+    showError("Interval cannot exceed 3600s (1 hour).");
+    return;
+  }
 
   chrome.runtime.sendMessage({ action: "START", mode: mode, interval: interval }, (response) => {
     if (chrome.runtime.lastError) {

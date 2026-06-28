@@ -105,11 +105,28 @@ function simulateActivity() {
 }
 
 // ------------------------------------------------------------
+// In-Memory Session Cache to prevent storage read-modify-write race conditions
+// ------------------------------------------------------------
+let sessionCache = null;
+
+async function getSessions() {
+  if (sessionCache === null) {
+    const storage = await chrome.storage.local.get("activeSessions");
+    sessionCache = storage.activeSessions || {};
+  }
+  return sessionCache;
+}
+
+async function saveSessions(sessions) {
+  sessionCache = sessions;
+  await chrome.storage.local.set({ activeSessions: sessionCache });
+}
+
+// ------------------------------------------------------------
 // Start session
 // ------------------------------------------------------------
 async function startSession(tabId, tabTitle, mode, interval) {
-  const storage = await chrome.storage.local.get("activeSessions");
-  const activeSessions = storage.activeSessions || {};
+  const activeSessions = await getSessions();
 
   activeSessions[tabId] = {
     tabId: tabId,
@@ -119,7 +136,7 @@ async function startSession(tabId, tabTitle, mode, interval) {
     interval: interval
   };
 
-  await chrome.storage.local.set({ activeSessions });
+  await saveSessions(activeSessions);
 
   const alarmName = `${ALARM_PREFIX}${tabId}`;
 
@@ -154,8 +171,7 @@ async function startSession(tabId, tabTitle, mode, interval) {
 // Stop session — clear storage & alarm/interval
 // ------------------------------------------------------------
 async function stopSession(tabId, reason = "manual") {
-  const storage = await chrome.storage.local.get("activeSessions");
-  const activeSessions = storage.activeSessions || {};
+  const activeSessions = await getSessions();
 
   const session = activeSessions[tabId];
   if (!session) {
@@ -168,19 +184,29 @@ async function stopSession(tabId, reason = "manual") {
 
   // Clear content script interval if running
   if (session.mode === "content_script") {
+    let tabExists = false;
     try {
-      await chrome.scripting.executeScript({
-        target: { tabId: tabId, allFrames: true },
-        func: stopContentScriptInterval,
-        world: "MAIN" // Must match the world where we injected
-      });
-    } catch (err) {
-      log(`Failed to execute stop script for Tab ID ${tabId} (tab might be closed): ${err.message}`);
+      await chrome.tabs.get(tabId);
+      tabExists = true;
+    } catch (_) {
+      log(`Tab ID ${tabId} does not exist. Skipping stop script injection.`);
+    }
+
+    if (tabExists) {
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId: tabId, allFrames: true },
+          func: stopContentScriptInterval,
+          world: "MAIN" // Must match the world where we injected
+        });
+      } catch (err) {
+        log(`Failed to execute stop script for Tab ID ${tabId}: ${err.message}`);
+      }
     }
   }
 
   delete activeSessions[tabId];
-  await chrome.storage.local.set({ activeSessions });
+  await saveSessions(activeSessions);
   log(`Session stopped for Tab ID ${tabId}. Reason: ${reason}`);
 }
 
@@ -193,8 +219,7 @@ async function handleAlarm(alarm) {
   const tabId = parseInt(alarm.name.replace(ALARM_PREFIX, ""), 10);
   if (isNaN(tabId)) return;
 
-  const storage = await chrome.storage.local.get("activeSessions");
-  const activeSessions = storage.activeSessions || {};
+  const activeSessions = await getSessions();
   const session = activeSessions[tabId];
 
   if (!session) {
@@ -285,8 +310,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     (async () => {
       const tabId = message.tabId;
       if (tabId === "all") {
-        const storage = await chrome.storage.local.get("activeSessions");
-        const activeSessions = storage.activeSessions || {};
+        const activeSessions = await getSessions();
         for (const id of Object.keys(activeSessions)) {
           await stopSession(parseInt(id, 10), "manual_all");
         }
@@ -307,8 +331,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       const currentTabId = activeTab ? activeTab.id : null;
       const currentTabTitle = activeTab ? activeTab.title : "";
 
-      const storage = await chrome.storage.local.get("activeSessions");
-      const activeSessions = storage.activeSessions || {};
+      const activeSessions = await getSessions();
 
       sendResponse({
         currentTabId: currentTabId,
@@ -329,8 +352,7 @@ chrome.alarms.onAlarm.addListener(handleAlarm);
 // Listener: When tab is closed — auto-stop if it is in activeSessions
 // ------------------------------------------------------------
 chrome.tabs.onRemoved.addListener(async (tabId) => {
-  const storage = await chrome.storage.local.get("activeSessions");
-  const activeSessions = storage.activeSessions || {};
+  const activeSessions = await getSessions();
   if (activeSessions[tabId]) {
     log(`Target tab (ID: ${tabId}) closed by user. Stopping session.`);
     await stopSession(tabId, "tab closed");
@@ -342,8 +364,7 @@ chrome.tabs.onRemoved.addListener(async (tabId) => {
 // ------------------------------------------------------------
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
   if (changeInfo.status === "complete") {
-    const storage = await chrome.storage.local.get("activeSessions");
-    const activeSessions = storage.activeSessions || {};
+    const activeSessions = await getSessions();
     const session = activeSessions[tabId];
     if (session && session.mode === "content_script") {
       log(`Target tab (ID: ${tabId}) reloaded. Re-injecting interval script.`);
@@ -359,6 +380,15 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
       }
     }
   }
+});
+
+// ------------------------------------------------------------
+// Listener: When browser starts up — clean up all stale sessions
+// ------------------------------------------------------------
+chrome.runtime.onStartup.addListener(async () => {
+  log("Browser started. Clearing all stale active sessions.");
+  await saveSessions({});
+  await chrome.alarms.clearAll();
 });
 
 // Service Worker startup log
