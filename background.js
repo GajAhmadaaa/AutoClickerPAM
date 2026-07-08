@@ -6,6 +6,13 @@
 const ALARM_PREFIX = "autoClickerPAM_alarm_";
 
 // ------------------------------------------------------------
+// Simulation Configuration Parameters
+// ------------------------------------------------------------
+const SCANCODE_LEFT_SHIFT = 42;
+const MAX_MOUSE_MOVE_PX = 50;
+const KEY_PRESS_DURATION_MS = 30;
+
+// ------------------------------------------------------------
 // Helper: Log with prefix
 // ------------------------------------------------------------
 function log(msg) {
@@ -15,27 +22,30 @@ function log(msg) {
 // ------------------------------------------------------------
 // Scripts injected into target tab for Content Script Mode
 // ------------------------------------------------------------
-function startContentScriptInterval(intervalSec) {
+function injectContentScriptLoop(intervalSec, scancode, maxMouseMove, keyDuration) {
   if (window.pamAutoClickerInterval) {
     clearInterval(window.pamAutoClickerInterval);
   }
 
-  function simulateActivity() {
+  // Parameters are passed via chrome.scripting.executeScript args
+  // since the injected function cannot access the service worker scope
+
+  function simulateContentScriptActivity() {
     try {
       // --- ManageEngine PAM360 ($rdp API) ---
       if (typeof window.$rdp !== "undefined") {
         try {
           if (typeof window.$rdp.writeScancode === "function") {
-            window.$rdp.writeScancode(42, true); // Left Shift down
+            window.$rdp.writeScancode(scancode, true); // Key down
             setTimeout(() => {
               if (typeof window.$rdp !== "undefined" && typeof window.$rdp.writeScancode === "function") {
-                  window.$rdp.writeScancode(42, false); // Left Shift up
+                window.$rdp.writeScancode(scancode, false); // Key up
               }
-            }, 30);
+            }, keyDuration);
           }
           if (typeof window.$rdp.mouseMove === "function") {
             const randomSmall = (max) => Math.floor(Math.random() * max);
-            window.$rdp.mouseMove(randomSmall(50), randomSmall(50));
+            window.$rdp.mouseMove(randomSmall(maxMouseMove), randomSmall(maxMouseMove));
           }
         } catch (err) {
           console.error("[AutoClickerPAM] Error calling $rdp API:", err);
@@ -52,17 +62,17 @@ function startContentScriptInterval(intervalSec) {
   }
 
   // Execute once immediately
-  simulateActivity();
+  simulateContentScriptActivity();
 
   // Set the interval
-  window.pamAutoClickerInterval = setInterval(simulateActivity, intervalSec * 1000);
+  window.pamAutoClickerInterval = setInterval(simulateContentScriptActivity, intervalSec * 1000);
   console.log(`[AutoClickerPAM] Keep-alive interval set to ${intervalSec}s.`);
 }
 
 // ------------------------------------------------------------
 // Stop script injected into target tab for Content Script Mode
 // ------------------------------------------------------------
-function stopContentScriptInterval() {
+function stopContentScriptLoop() {
   if (window.pamAutoClickerInterval) {
     clearInterval(window.pamAutoClickerInterval);
     window.pamAutoClickerInterval = null;
@@ -73,22 +83,23 @@ function stopContentScriptInterval() {
 // ------------------------------------------------------------
 // Script injected into target tab for Alarm Mode (Fires once per alarm tick)
 // ------------------------------------------------------------
-function simulateActivity() {
+function simulateAlarmActivity(scancode, maxMouseMove, keyDuration) {
+
   try {
     // --- ManageEngine PAM360 ($rdp API) ---
     if (typeof window.$rdp !== "undefined") {
       try {
         if (typeof window.$rdp.writeScancode === "function") {
-          window.$rdp.writeScancode(42, true); // Left Shift down
+          window.$rdp.writeScancode(scancode, true); // Key down
           setTimeout(() => {
             if (typeof window.$rdp !== "undefined" && typeof window.$rdp.writeScancode === "function") {
-                window.$rdp.writeScancode(42, false); // Left Shift up
+              window.$rdp.writeScancode(scancode, false); // Key up
             }
-          }, 30);
+          }, keyDuration);
         }
         if (typeof window.$rdp.mouseMove === "function") {
           const randomSmall = (max) => Math.floor(Math.random() * max);
-          window.$rdp.mouseMove(randomSmall(50), randomSmall(50));
+          window.$rdp.mouseMove(randomSmall(maxMouseMove), randomSmall(maxMouseMove));
         }
       } catch (err) {
         console.error("[AutoClickerPAM] Error calling $rdp API:", err);
@@ -149,14 +160,14 @@ async function startSession(tabId, tabTitle, mode, interval) {
       periodInMinutes: periodMinutes,
     });
     log(`Session started (Alarm Mode). Tab: "${tabTitle}" (ID: ${tabId}). Interval: ${interval}s`);
-  } else {
+  } else if (mode === "content_script") {
     // Content script mode (direct injection)
     await chrome.alarms.clear(alarmName); // Ensure alarm is clean
     try {
       await chrome.scripting.executeScript({
         target: { tabId: tabId, allFrames: true },
-        func: startContentScriptInterval,
-        args: [interval],
+        func: injectContentScriptLoop,
+        args: [interval, SCANCODE_LEFT_SHIFT, MAX_MOUSE_MOVE_PX, KEY_PRESS_DURATION_MS],
         world: "MAIN" // Inject into page context to access window.$rdp
       });
       log(`Session started (Content Script Mode). Tab: "${tabTitle}" (ID: ${tabId}). Interval: ${interval}s`);
@@ -196,7 +207,7 @@ async function stopSession(tabId, reason = "manual") {
       try {
         await chrome.scripting.executeScript({
           target: { tabId: tabId, allFrames: true },
-          func: stopContentScriptInterval,
+          func: stopContentScriptLoop,
           world: "MAIN" // Must match the world where we injected
         });
       } catch (err) {
@@ -249,7 +260,8 @@ async function handleAlarm(alarm) {
   try {
     await chrome.scripting.executeScript({
       target: { tabId: tabId, allFrames: true },
-      func: simulateActivity,
+      func: simulateAlarmActivity,
+      args: [SCANCODE_LEFT_SHIFT, MAX_MOUSE_MOVE_PX, KEY_PRESS_DURATION_MS],
       world: "MAIN" // Inject into page context to access window.$rdp
     });
     log(`Activity simulation successfully executed on Tab ID: ${tabId}`);
@@ -296,8 +308,27 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         return;
       }
 
+      // Defensive Validation for Mode and Interval
+      const mode = message.mode;
+      const interval = parseInt(message.interval, 10);
+
+      if (mode !== "alarm" && mode !== "content_script") {
+        sendResponse({ success: false, error: "Invalid operation mode." });
+        return;
+      }
+
+      if (isNaN(interval) || interval < 5 || interval > 3600) {
+        sendResponse({ success: false, error: "Interval must be between 5 and 3600 seconds." });
+        return;
+      }
+
+      if (mode === "alarm" && interval < 60) {
+        sendResponse({ success: false, error: "Alarm mode requires an interval of at least 60 seconds." });
+        return;
+      }
+
       try {
-        await startSession(activeTab.id, activeTab.title || "Untitled Tab", message.mode, message.interval);
+        await startSession(activeTab.id, activeTab.title || "Untitled Tab", mode, interval);
         sendResponse({ success: true, tabTitle: activeTab.title });
       } catch (err) {
         sendResponse({ success: false, error: err.message });
@@ -371,8 +402,8 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
       try {
         await chrome.scripting.executeScript({
           target: { tabId: tabId, allFrames: true },
-          func: startContentScriptInterval,
-          args: [session.interval],
+          func: injectContentScriptLoop,
+          args: [session.interval, SCANCODE_LEFT_SHIFT, MAX_MOUSE_MOVE_PX, KEY_PRESS_DURATION_MS],
           world: "MAIN"
         });
       } catch (err) {

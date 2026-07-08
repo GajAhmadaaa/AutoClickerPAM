@@ -3,6 +3,8 @@
 // Manages popup UI: status, settings, start/stop, timer, progress
 // ============================================================
 
+"use strict";
+
 // DOM References
 const statusBadge   = document.getElementById("statusBadge");
 const statusText    = document.getElementById("statusText");
