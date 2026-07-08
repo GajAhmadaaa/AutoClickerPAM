@@ -9,9 +9,8 @@ const ALARM_PREFIX = "autoClickerPAM_alarm_";
 // Simulation Configuration Parameters
 // ------------------------------------------------------------
 const SCANCODE_F15 = 87;
-const JITTER_X_A = 600;
-const JITTER_X_B = 601;
-const JITTER_Y = 300;
+const DEFAULT_MOUSE_X = 600;
+const DEFAULT_MOUSE_Y = 300;
 const KEY_PRESS_DURATION_MS = 120;
 
 // ------------------------------------------------------------
@@ -25,29 +24,25 @@ function log(msg) {
 // Scripts injected into target tab for Content Script Mode
 // Cross-ref: simulateAlarmActivity() contains identical simulation logic
 // ------------------------------------------------------------
-function injectContentScriptLoop(intervalSec, scancode, keyDuration) {
+function injectContentScriptLoop(intervalSec, scancode, keyDuration, defaultX, defaultY) {
   if (window.pamAutoClickerInterval) {
     clearInterval(window.pamAutoClickerInterval);
   }
 
-  // Set up mouse tracking listener on canvas if not present
+  // Define the tracking function globally so it can be detached later
   if (!window.pamMouseTrackHandler) {
     window.pamMouseTrackHandler = function(e) {
       window.pamLastX = e.offsetX;
       window.pamLastY = e.offsetY;
     };
-    const canvas = document.getElementById("remotectrl");
-    if (canvas) {
-      canvas.addEventListener("mousemove", window.pamMouseTrackHandler);
-    }
   }
 
   // Initialize state properties
   if (typeof window.pamLastX === "undefined" || window.pamLastX === null) {
-    window.pamLastX = 600;
+    window.pamLastX = defaultX;
   }
   if (typeof window.pamLastY === "undefined" || window.pamLastY === null) {
-    window.pamLastY = 300;
+    window.pamLastY = defaultY;
   }
   window.pamActivityToggle = false;
   window.pamJitterToggle = false;
@@ -57,6 +52,16 @@ function injectContentScriptLoop(intervalSec, scancode, keyDuration) {
     try {
       if (typeof window.$rdp !== "undefined") {
         try {
+          // Resiliently attempt to attach the tracking listener if not yet attached
+          if (!window.pamMouseTrackAttached) {
+            const canvas = document.getElementById("remotectrl");
+            if (canvas) {
+              canvas.addEventListener("mousemove", window.pamMouseTrackHandler);
+              window.pamMouseTrackAttached = true;
+              console.log("[ACP] Mouse tracker successfully attached to canvas.");
+            }
+          }
+
           // Alternate between mouse and keyboard each tick
           window.pamActivityToggle = !window.pamActivityToggle;
 
@@ -64,8 +69,8 @@ function injectContentScriptLoop(intervalSec, scancode, keyDuration) {
             // --- Mouse Jitter Tick ---
             if (typeof window.$rdp.mouseMove === "function") {
               window.pamJitterToggle = !window.pamJitterToggle;
-              const baseX = (typeof window.pamLastX === "number") ? window.pamLastX : 600;
-              const baseY = (typeof window.pamLastY === "number") ? window.pamLastY : 300;
+              const baseX = (typeof window.pamLastX === "number") ? window.pamLastX : defaultX;
+              const baseY = (typeof window.pamLastY === "number") ? window.pamLastY : defaultY;
               const targetX = baseX + (window.pamJitterToggle ? 1 : -1);
               window.$rdp.mouseMove(targetX, baseY);
               console.log(`[ACP] Mouse Jitter to (${targetX}, ${baseY}) in ${(performance.now() - t0).toFixed(1)}ms`);
@@ -113,6 +118,7 @@ function stopActivitySimulation() {
       canvas.removeEventListener("mousemove", window.pamMouseTrackHandler);
     }
     window.pamMouseTrackHandler = null;
+    window.pamMouseTrackAttached = null;
   }
   window.pamActivityToggle = null;
   window.pamJitterToggle = null;
@@ -125,25 +131,21 @@ function stopActivitySimulation() {
 // Script injected into target tab for Alarm Mode (Fires once per alarm tick)
 // Cross-ref: injectContentScriptLoop() contains identical simulation logic
 // ------------------------------------------------------------
-function simulateAlarmActivity(scancode, keyDuration) {
-  // Set up mouse tracking listener on canvas if not present
+function simulateAlarmActivity(scancode, keyDuration, defaultX, defaultY) {
+  // Define the tracking function globally so it can be detached later
   if (!window.pamMouseTrackHandler) {
     window.pamMouseTrackHandler = function(e) {
       window.pamLastX = e.offsetX;
       window.pamLastY = e.offsetY;
     };
-    const canvas = document.getElementById("remotectrl");
-    if (canvas) {
-      canvas.addEventListener("mousemove", window.pamMouseTrackHandler);
-    }
   }
 
   // Defensively initialize state if not yet set (persists across alarm injections)
   if (typeof window.pamLastX === "undefined" || window.pamLastX === null) {
-    window.pamLastX = 600;
+    window.pamLastX = defaultX;
   }
   if (typeof window.pamLastY === "undefined" || window.pamLastY === null) {
-    window.pamLastY = 300;
+    window.pamLastY = defaultY;
   }
   if (typeof window.pamActivityToggle === "undefined" || window.pamActivityToggle === null) {
     window.pamActivityToggle = false;
@@ -156,6 +158,16 @@ function simulateAlarmActivity(scancode, keyDuration) {
   try {
     if (typeof window.$rdp !== "undefined") {
       try {
+        // Resiliently attempt to attach the tracking listener if not yet attached
+        if (!window.pamMouseTrackAttached) {
+          const canvas = document.getElementById("remotectrl");
+          if (canvas) {
+            canvas.addEventListener("mousemove", window.pamMouseTrackHandler);
+            window.pamMouseTrackAttached = true;
+            console.log("[ACP] Mouse tracker successfully attached to canvas.");
+          }
+        }
+
         // Alternate between mouse and keyboard each tick
         window.pamActivityToggle = !window.pamActivityToggle;
 
@@ -163,8 +175,8 @@ function simulateAlarmActivity(scancode, keyDuration) {
           // --- Mouse Jitter Tick ---
           if (typeof window.$rdp.mouseMove === "function") {
             window.pamJitterToggle = !window.pamJitterToggle;
-            const baseX = (typeof window.pamLastX === "number") ? window.pamLastX : 600;
-            const baseY = (typeof window.pamLastY === "number") ? window.pamLastY : 300;
+            const baseX = (typeof window.pamLastX === "number") ? window.pamLastX : defaultX;
+            const baseY = (typeof window.pamLastY === "number") ? window.pamLastY : defaultY;
             const targetX = baseX + (window.pamJitterToggle ? 1 : -1);
             window.$rdp.mouseMove(targetX, baseY);
             console.log(`[ACP] Mouse Jitter to (${targetX}, ${baseY}) in ${(performance.now() - t0).toFixed(1)}ms`);
@@ -242,7 +254,7 @@ async function startSession(tabId, tabTitle, mode, interval) {
       await chrome.scripting.executeScript({
         target: { tabId: tabId, allFrames: true },
         func: injectContentScriptLoop,
-        args: [interval, SCANCODE_F15, KEY_PRESS_DURATION_MS],
+        args: [interval, SCANCODE_F15, KEY_PRESS_DURATION_MS, DEFAULT_MOUSE_X, DEFAULT_MOUSE_Y],
         world: "MAIN" // Inject into page context to access window.$rdp
       });
       log(`Session started (Content Script Mode). Tab: "${tabTitle}" (ID: ${tabId}). Interval: ${interval}s`);
@@ -334,7 +346,7 @@ async function handleAlarm(alarm) {
     await chrome.scripting.executeScript({
       target: { tabId: tabId, allFrames: true },
       func: simulateAlarmActivity,
-      args: [SCANCODE_F15, KEY_PRESS_DURATION_MS],
+      args: [SCANCODE_F15, KEY_PRESS_DURATION_MS, DEFAULT_MOUSE_X, DEFAULT_MOUSE_Y],
       world: "MAIN" // Inject into page context to access window.$rdp
     });
     log(`Activity simulation successfully executed on Tab ID: ${tabId}`);
@@ -476,7 +488,7 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
         await chrome.scripting.executeScript({
           target: { tabId: tabId, allFrames: true },
           func: injectContentScriptLoop,
-          args: [session.interval, SCANCODE_F15, KEY_PRESS_DURATION_MS],
+          args: [session.interval, SCANCODE_F15, KEY_PRESS_DURATION_MS, DEFAULT_MOUSE_X, DEFAULT_MOUSE_Y],
           world: "MAIN"
         });
       } catch (err) {
