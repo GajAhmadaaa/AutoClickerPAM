@@ -8,9 +8,11 @@ const ALARM_PREFIX = "autoClickerPAM_alarm_";
 // ------------------------------------------------------------
 // Simulation Configuration Parameters
 // ------------------------------------------------------------
-const SCANCODE_LEFT_SHIFT = 42;
-const MAX_MOUSE_MOVE_PX = 50;
-const KEY_PRESS_DURATION_MS = 30;
+const SCANCODE_F15 = 87;
+const JITTER_X_A = 600;
+const JITTER_X_B = 601;
+const JITTER_Y = 300;
+const KEY_PRESS_DURATION_MS = 120;
 
 // ------------------------------------------------------------
 // Helper: Log with prefix
@@ -21,43 +23,71 @@ function log(msg) {
 
 // ------------------------------------------------------------
 // Scripts injected into target tab for Content Script Mode
+// Cross-ref: simulateAlarmActivity() contains identical simulation logic
 // ------------------------------------------------------------
-function injectContentScriptLoop(intervalSec, scancode, maxMouseMove, keyDuration) {
+function injectContentScriptLoop(intervalSec, scancode, keyDuration) {
   if (window.pamAutoClickerInterval) {
     clearInterval(window.pamAutoClickerInterval);
   }
 
-  // Parameters are passed via chrome.scripting.executeScript args
-  // since the injected function cannot access the service worker scope
+  // Set up mouse tracking listener on canvas if not present
+  if (!window.pamMouseTrackHandler) {
+    window.pamMouseTrackHandler = function(e) {
+      window.pamLastX = e.offsetX;
+      window.pamLastY = e.offsetY;
+    };
+    const canvas = document.getElementById("remotectrl");
+    if (canvas) {
+      canvas.addEventListener("mousemove", window.pamMouseTrackHandler);
+    }
+  }
+
+  // Initialize state properties
+  if (typeof window.pamLastX === "undefined" || window.pamLastX === null) {
+    window.pamLastX = 600;
+  }
+  if (typeof window.pamLastY === "undefined" || window.pamLastY === null) {
+    window.pamLastY = 300;
+  }
+  window.pamActivityToggle = false;
+  window.pamJitterToggle = false;
 
   function simulateContentScriptActivity() {
+    const t0 = performance.now();
     try {
-      // --- ManageEngine PAM360 ($rdp API) ---
       if (typeof window.$rdp !== "undefined") {
         try {
-          if (typeof window.$rdp.writeScancode === "function") {
-            window.$rdp.writeScancode(scancode, true); // Key down
-            setTimeout(() => {
-              if (typeof window.$rdp !== "undefined" && typeof window.$rdp.writeScancode === "function") {
-                window.$rdp.writeScancode(scancode, false); // Key up
-              }
-            }, keyDuration);
-          }
-          if (typeof window.$rdp.mouseMove === "function") {
-            const randomSmall = (max) => Math.floor(Math.random() * max);
-            window.$rdp.mouseMove(randomSmall(maxMouseMove), randomSmall(maxMouseMove));
+          // Alternate between mouse and keyboard each tick
+          window.pamActivityToggle = !window.pamActivityToggle;
+
+          if (window.pamActivityToggle) {
+            // --- Mouse Jitter Tick ---
+            if (typeof window.$rdp.mouseMove === "function") {
+              window.pamJitterToggle = !window.pamJitterToggle;
+              const baseX = (typeof window.pamLastX === "number") ? window.pamLastX : 600;
+              const baseY = (typeof window.pamLastY === "number") ? window.pamLastY : 300;
+              const targetX = baseX + (window.pamJitterToggle ? 1 : -1);
+              window.$rdp.mouseMove(targetX, baseY);
+              console.log(`[ACP] Mouse Jitter to (${targetX}, ${baseY}) in ${(performance.now() - t0).toFixed(1)}ms`);
+            }
+          } else {
+            // --- Keyboard Press Tick ---
+            if (typeof window.$rdp.writeScancode === "function") {
+              window.$rdp.writeScancode(scancode, true); // Key down
+              setTimeout(() => {
+                if (typeof window.$rdp !== "undefined" && typeof window.$rdp.writeScancode === "function") {
+                  window.$rdp.writeScancode(scancode, false); // Key up
+                }
+              }, keyDuration);
+              console.log(`[ACP] Scancode press simulated in ${(performance.now() - t0).toFixed(1)}ms`);
+            }
           }
         } catch (err) {
-          console.error("[AutoClickerPAM] Error calling $rdp API:", err);
+          console.error("[ACP] Error calling $rdp API:", err);
         }
       }
-
-      console.log(
-        "[AutoClickerPAM] Light activity simulated (Content Script Mode):",
-        new Date().toLocaleTimeString()
-      );
     } catch (err) {
-      console.error("[AutoClickerPAM] Error during simulation:", err);
+      console.error("[ACP] Error during simulation:", err);
     }
   }
 
@@ -66,52 +96,97 @@ function injectContentScriptLoop(intervalSec, scancode, maxMouseMove, keyDuratio
 
   // Set the interval
   window.pamAutoClickerInterval = setInterval(simulateContentScriptActivity, intervalSec * 1000);
-  console.log(`[AutoClickerPAM] Keep-alive interval set to ${intervalSec}s.`);
+  console.log(`[ACP] Keep-alive interval set to ${intervalSec}s.`);
 }
 
 // ------------------------------------------------------------
-// Stop script injected into target tab for Content Script Mode
+// Stop script injected into target tab (Unified Cleanup for both modes)
 // ------------------------------------------------------------
-function stopContentScriptLoop() {
+function stopActivitySimulation() {
   if (window.pamAutoClickerInterval) {
     clearInterval(window.pamAutoClickerInterval);
     window.pamAutoClickerInterval = null;
-    console.log("[AutoClickerPAM] Keep-alive interval cleared.");
   }
+  if (window.pamMouseTrackHandler) {
+    const canvas = document.getElementById("remotectrl");
+    if (canvas) {
+      canvas.removeEventListener("mousemove", window.pamMouseTrackHandler);
+    }
+    window.pamMouseTrackHandler = null;
+  }
+  window.pamActivityToggle = null;
+  window.pamJitterToggle = null;
+  window.pamLastX = null;
+  window.pamLastY = null;
+  console.log("[ACP] Activity simulation stopped and state cleared.");
 }
 
 // ------------------------------------------------------------
 // Script injected into target tab for Alarm Mode (Fires once per alarm tick)
+// Cross-ref: injectContentScriptLoop() contains identical simulation logic
 // ------------------------------------------------------------
-function simulateAlarmActivity(scancode, maxMouseMove, keyDuration) {
+function simulateAlarmActivity(scancode, keyDuration) {
+  // Set up mouse tracking listener on canvas if not present
+  if (!window.pamMouseTrackHandler) {
+    window.pamMouseTrackHandler = function(e) {
+      window.pamLastX = e.offsetX;
+      window.pamLastY = e.offsetY;
+    };
+    const canvas = document.getElementById("remotectrl");
+    if (canvas) {
+      canvas.addEventListener("mousemove", window.pamMouseTrackHandler);
+    }
+  }
 
+  // Defensively initialize state if not yet set (persists across alarm injections)
+  if (typeof window.pamLastX === "undefined" || window.pamLastX === null) {
+    window.pamLastX = 600;
+  }
+  if (typeof window.pamLastY === "undefined" || window.pamLastY === null) {
+    window.pamLastY = 300;
+  }
+  if (typeof window.pamActivityToggle === "undefined" || window.pamActivityToggle === null) {
+    window.pamActivityToggle = false;
+  }
+  if (typeof window.pamJitterToggle === "undefined" || window.pamJitterToggle === null) {
+    window.pamJitterToggle = false;
+  }
+
+  const t0 = performance.now();
   try {
-    // --- ManageEngine PAM360 ($rdp API) ---
     if (typeof window.$rdp !== "undefined") {
       try {
-        if (typeof window.$rdp.writeScancode === "function") {
-          window.$rdp.writeScancode(scancode, true); // Key down
-          setTimeout(() => {
-            if (typeof window.$rdp !== "undefined" && typeof window.$rdp.writeScancode === "function") {
-              window.$rdp.writeScancode(scancode, false); // Key up
-            }
-          }, keyDuration);
-        }
-        if (typeof window.$rdp.mouseMove === "function") {
-          const randomSmall = (max) => Math.floor(Math.random() * max);
-          window.$rdp.mouseMove(randomSmall(maxMouseMove), randomSmall(maxMouseMove));
+        // Alternate between mouse and keyboard each tick
+        window.pamActivityToggle = !window.pamActivityToggle;
+
+        if (window.pamActivityToggle) {
+          // --- Mouse Jitter Tick ---
+          if (typeof window.$rdp.mouseMove === "function") {
+            window.pamJitterToggle = !window.pamJitterToggle;
+            const baseX = (typeof window.pamLastX === "number") ? window.pamLastX : 600;
+            const baseY = (typeof window.pamLastY === "number") ? window.pamLastY : 300;
+            const targetX = baseX + (window.pamJitterToggle ? 1 : -1);
+            window.$rdp.mouseMove(targetX, baseY);
+            console.log(`[ACP] Mouse Jitter to (${targetX}, ${baseY}) in ${(performance.now() - t0).toFixed(1)}ms`);
+          }
+        } else {
+          // --- Keyboard Press Tick ---
+          if (typeof window.$rdp.writeScancode === "function") {
+            window.$rdp.writeScancode(scancode, true); // Key down
+            setTimeout(() => {
+              if (typeof window.$rdp !== "undefined" && typeof window.$rdp.writeScancode === "function") {
+                window.$rdp.writeScancode(scancode, false); // Key up
+              }
+            }, keyDuration);
+            console.log(`[ACP] Scancode press simulated in ${(performance.now() - t0).toFixed(1)}ms`);
+          }
         }
       } catch (err) {
-        console.error("[AutoClickerPAM] Error calling $rdp API:", err);
+        console.error("[ACP] Error calling $rdp API:", err);
       }
     }
-
-    console.log(
-      "[AutoClickerPAM] Light activity simulated (Alarm Mode):",
-      new Date().toLocaleTimeString()
-    );
   } catch (err) {
-    console.error("[AutoClickerPAM] Error during simulation:", err);
+    console.error("[ACP] Error during simulation:", err);
   }
 }
 
@@ -167,7 +242,7 @@ async function startSession(tabId, tabTitle, mode, interval) {
       await chrome.scripting.executeScript({
         target: { tabId: tabId, allFrames: true },
         func: injectContentScriptLoop,
-        args: [interval, SCANCODE_LEFT_SHIFT, MAX_MOUSE_MOVE_PX, KEY_PRESS_DURATION_MS],
+        args: [interval, SCANCODE_F15, KEY_PRESS_DURATION_MS],
         world: "MAIN" // Inject into page context to access window.$rdp
       });
       log(`Session started (Content Script Mode). Tab: "${tabTitle}" (ID: ${tabId}). Interval: ${interval}s`);
@@ -193,26 +268,24 @@ async function stopSession(tabId, reason = "manual") {
   const alarmName = `${ALARM_PREFIX}${tabId}`;
   await chrome.alarms.clear(alarmName);
 
-  // Clear content script interval if running
-  if (session.mode === "content_script") {
-    let tabExists = false;
-    try {
-      await chrome.tabs.get(tabId);
-      tabExists = true;
-    } catch (_) {
-      log(`Tab ID ${tabId} does not exist. Skipping stop script injection.`);
-    }
+  // Clear simulation state in the target tab (both modes)
+  let tabExists = false;
+  try {
+    await chrome.tabs.get(tabId);
+    tabExists = true;
+  } catch (_) {
+    log(`Tab ID ${tabId} does not exist. Skipping stop script injection.`);
+  }
 
-    if (tabExists) {
-      try {
-        await chrome.scripting.executeScript({
-          target: { tabId: tabId, allFrames: true },
-          func: stopContentScriptLoop,
-          world: "MAIN" // Must match the world where we injected
-        });
-      } catch (err) {
-        log(`Failed to execute stop script for Tab ID ${tabId}: ${err.message}`);
-      }
+  if (tabExists) {
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId: tabId, allFrames: true },
+        func: stopActivitySimulation,
+        world: "MAIN" // Must match the world where we injected
+      });
+    } catch (err) {
+      log(`Failed to execute stop script for Tab ID ${tabId}: ${err.message}`);
     }
   }
 
@@ -261,7 +334,7 @@ async function handleAlarm(alarm) {
     await chrome.scripting.executeScript({
       target: { tabId: tabId, allFrames: true },
       func: simulateAlarmActivity,
-      args: [SCANCODE_LEFT_SHIFT, MAX_MOUSE_MOVE_PX, KEY_PRESS_DURATION_MS],
+      args: [SCANCODE_F15, KEY_PRESS_DURATION_MS],
       world: "MAIN" // Inject into page context to access window.$rdp
     });
     log(`Activity simulation successfully executed on Tab ID: ${tabId}`);
@@ -403,7 +476,7 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
         await chrome.scripting.executeScript({
           target: { tabId: tabId, allFrames: true },
           func: injectContentScriptLoop,
-          args: [session.interval, SCANCODE_LEFT_SHIFT, MAX_MOUSE_MOVE_PX, KEY_PRESS_DURATION_MS],
+          args: [session.interval, SCANCODE_F15, KEY_PRESS_DURATION_MS],
           world: "MAIN"
         });
       } catch (err) {
