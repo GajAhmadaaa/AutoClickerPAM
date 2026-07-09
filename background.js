@@ -32,8 +32,15 @@ function injectContentScriptLoop(intervalSec, scancode, keyDuration, defaultX, d
   // Define the tracking function globally so it can be detached later
   if (!window.pamMouseTrackHandler) {
     window.pamMouseTrackHandler = function(e) {
-      window.pamLastX = e.offsetX;
-      window.pamLastY = e.offsetY;
+      const canvas = document.getElementById("remotectrl");
+      if (!canvas) return;
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      if (x >= 0 && x <= rect.width && y >= 0 && y <= rect.height) {
+        window.pamLastX = Math.floor(x);
+        window.pamLastY = Math.floor(y);
+      }
     };
   }
 
@@ -54,12 +61,9 @@ function injectContentScriptLoop(intervalSec, scancode, keyDuration, defaultX, d
         try {
           // Resiliently attempt to attach the tracking listener if not yet attached
           if (!window.pamMouseTrackAttached) {
-            const canvas = document.getElementById("remotectrl");
-            if (canvas) {
-              canvas.addEventListener("mousemove", window.pamMouseTrackHandler);
-              window.pamMouseTrackAttached = true;
-              console.log("[ACP] Mouse tracker successfully attached to canvas.");
-            }
+            document.addEventListener("mousemove", window.pamMouseTrackHandler, true);
+            window.pamMouseTrackAttached = true;
+            console.log("[ACP] Mouse tracker successfully attached to document (capture phase).");
           }
 
           // Alternate between mouse and keyboard each tick
@@ -113,10 +117,7 @@ function stopActivitySimulation() {
     window.pamAutoClickerInterval = null;
   }
   if (window.pamMouseTrackHandler) {
-    const canvas = document.getElementById("remotectrl");
-    if (canvas) {
-      canvas.removeEventListener("mousemove", window.pamMouseTrackHandler);
-    }
+    document.removeEventListener("mousemove", window.pamMouseTrackHandler, true);
     window.pamMouseTrackHandler = null;
     window.pamMouseTrackAttached = null;
   }
@@ -135,8 +136,15 @@ function simulateAlarmActivity(scancode, keyDuration, defaultX, defaultY) {
   // Define the tracking function globally so it can be detached later
   if (!window.pamMouseTrackHandler) {
     window.pamMouseTrackHandler = function(e) {
-      window.pamLastX = e.offsetX;
-      window.pamLastY = e.offsetY;
+      const canvas = document.getElementById("remotectrl");
+      if (!canvas) return;
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      if (x >= 0 && x <= rect.width && y >= 0 && y <= rect.height) {
+        window.pamLastX = Math.floor(x);
+        window.pamLastY = Math.floor(y);
+      }
     };
   }
 
@@ -160,12 +168,9 @@ function simulateAlarmActivity(scancode, keyDuration, defaultX, defaultY) {
       try {
         // Resiliently attempt to attach the tracking listener if not yet attached
         if (!window.pamMouseTrackAttached) {
-          const canvas = document.getElementById("remotectrl");
-          if (canvas) {
-            canvas.addEventListener("mousemove", window.pamMouseTrackHandler);
-            window.pamMouseTrackAttached = true;
-            console.log("[ACP] Mouse tracker successfully attached to canvas.");
-          }
+          document.addEventListener("mousemove", window.pamMouseTrackHandler, true);
+          window.pamMouseTrackAttached = true;
+          console.log("[ACP] Mouse tracker successfully attached to document (capture phase).");
         }
 
         // Alternate between mouse and keyboard each tick
